@@ -315,25 +315,25 @@ function startInspectorReviewPhaseOne() {
         name: 'Giacomo - Ispettore ATM',
         image: '/inspector.png',
         tone: 'warning',
-        text: "Hmmm... vediamo se siete stati in grado di sistemare questi capolavori di autobus.",
+        text: 'Hmmm... vediamo se siete stati in grado di sistemare questi capolavori di autobus.',
       },
       {
         name: 'Giacomo - Ispettore ATM',
         image: '/inspector.png',
         tone: 'danger',
-        text: "Oh guarda, eh no, questo non va bene... mi dispiace ma devo scrivere... eeeeeh lo devo proprio scrivere.",
+        text: 'Oh guarda... eh no, questo non va bene. Mi dispiace, ma devo scrivere... eeeeh, lo devo proprio scrivere.',
       },
       {
         name: 'Operaio officina',
         image: '/operaio.png',
         tone: 'neutral',
-        text: "No dai non scrivere, guarda l'ho sistemato subito vedi? Ora e apposto.",
+        text: "No dai, non scrivere. Guarda, l'ho sistemato subito, vedi? Ora e a posto.",
       },
       {
         name: 'Giacomo - Ispettore ATM',
         image: '/inspector.png',
         tone: 'danger',
-        text: 'Eh lo so, ho visto, pero io lo devo scrivere comunque, mi dispiace.',
+        text: "Eh, lo so, ho visto. Pero io lo devo scrivere comunque, mi dispiace.",
       },
     ],
     () => {
@@ -356,7 +356,7 @@ function startInspectorReviewPhaseTwo() {
         name: 'Giacomo - Ispettore ATM',
         image: '/inspector.png',
         tone: 'danger',
-        text: "Ragazzi non ci siamo... io questo mezzo lo devo bocciare, mi dispiace davvero, ma ho visto che sotto al sedile in fondo c'e una vite non stretta bene anche se completamente inutile.",
+        text: "Ragazzi, non ci siamo... io questo mezzo lo devo bocciare. Mi dispiace davvero, ma ho visto che sotto al sedile in fondo c'e una vite non stretta bene, anche se e completamente inutile.",
       },
       {
         name: 'Antonella - Responsabile Iveco',
@@ -386,18 +386,10 @@ function endFinalVideo() {
 }
 
 function renderHeader() {
-  const phaseLabel =
-    state.phase < 2 ? 'Prima lista lavori' : state.phase < 3 ? 'Seconda lista lavori' : 'Finale';
-
   return `
     <header class="topbar">
       <div>
-        <p class="eyebrow">Officina digitale</p>
-        <h1>IVECO ORECCHIA</h1>
-      </div>
-      <div class="topbar-status">
-        <span class="status-dot"></span>
-        ${phaseLabel}
+        <h1>Iveco....Introduzione al manicomio</h1>
       </div>
     </header>
   `;
@@ -412,23 +404,14 @@ function renderScenePanel() {
 
   return `
     <section class="scene-panel panel">
-      <div class="panel-heading">
-        <div>
-          <p class="panel-kicker">Veicolo in lavorazione</p>
-          <h2>${state.editorOpen ? `Anteprima ${phaseLabels[visiblePhase]}` : 'Intervieni direttamente sul mezzo'}</h2>
-        </div>
-        <div class="vehicle-chip">
-          <span>Urbanway 12M</span>
-          <strong>Bus 3634</strong>
-        </div>
-      </div>
       <div class="mobile-tasks-entry">
         <button
           class="mobile-tasks-toggle"
           data-action="toggle-mobile-tasks"
           aria-expanded="${state.mobileTasksOpen ? 'true' : 'false'}"
         >
-          <span>Lista riparazioni</span>
+          <span>Clicca qui per vedere la lista lavori</span>
+          <em aria-hidden="true">Apri</em>
           <strong>${state.completedCount}/${state.tasks.length} completate</strong>
         </button>
       </div>
@@ -457,7 +440,6 @@ function renderScenePanel() {
 
           <div class="toolbelt-shell">
             <div class="toolbelt-label">
-              <span class="toolbelt-title">Attrezzatura ai piedi degli operai</span>
               <span class="toolbelt-subtitle">${selectedToolName}</span>
             </div>
             <div class="toolbelt">
@@ -550,7 +532,7 @@ function renderChecklistPanel() {
       </ol>
 
       <div class="checklist-note">
-        <p>I numeri sopra l'autobus corrispondono alla lista qui a destra.</p>
+        <p>Cerca i numeri sull'autobus e confrontali con questa lista per sapere dove cliccare.</p>
       </div>
     </aside>
   `;
@@ -670,14 +652,14 @@ function renderVideoOverlay() {
 
   return `
     <div class="video-overlay" role="dialog" aria-modal="true" aria-labelledby="video-title">
-      <div class="video-card">
-        <div class="video-copy">
-          <p class="panel-kicker">Finale</p>
-          <h2 id="video-title">Autobus in strada</h2>
-          <p>Finito il video, il gioco ripartira automaticamente dalla prima lista.</p>
-        </div>
-        <video class="final-video" src="/autobus in strada.mp4" autoplay playsinline controls></video>
-      </div>
+      <video
+        class="final-video"
+        id="video-title"
+        src="/autobus in strada.mp4"
+        autoplay
+        playsinline
+        controls
+      ></video>
     </div>
   `;
 }
