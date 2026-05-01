@@ -5,6 +5,8 @@ const app = document.querySelector('#app');
 
 const audioAntonella = new Audio('/antonella urla.mp3');
 audioAntonella.preload = 'auto';
+let cinematicTimeout = null;
+let loadingAudioContext = null;
 
 const phaseLabels = {
   1: 'Lista 1',
@@ -19,6 +21,8 @@ const state = {
   dialogQueue: [],
   activeDialog: null,
   onDialogComplete: null,
+  cinematicOverlay: null,
+  onCinematicComplete: null,
   videoPlaying: false,
   flashMessage: 'Seleziona un attrezzo e clicca i punti numerati sul mezzo.',
   flashTone: 'neutral',
@@ -33,9 +37,21 @@ const state = {
 };
 
 const toolLookup = new Map(toolsCatalog.map((tool) => [tool.id, tool]));
+const introToolSprites = [
+  { image: '/tool_wrench.png', x: '8%', y: '16%', delay: '0s', duration: '5.2s', size: '74px', rotate: '-18deg' },
+  { image: '/tool_sponge.png', x: '74%', y: '12%', delay: '0.4s', duration: '4.6s', size: '82px', rotate: '16deg' },
+  { image: '/tool_oil.png', x: '18%', y: '62%', delay: '0.7s', duration: '5.8s', size: '76px', rotate: '-8deg' },
+  { image: '/tool_liquid.png', x: '78%', y: '64%', delay: '0.1s', duration: '4.9s', size: '78px', rotate: '20deg' },
+  { image: '/tool_bulb.png', x: '46%', y: '10%', delay: '0.9s', duration: '5.4s', size: '70px', rotate: '-22deg' },
+  { image: '/tool_wrench.png', x: '54%', y: '72%', delay: '0.3s', duration: '4.7s', size: '68px', rotate: '14deg' },
+];
 
 function cloneTasks(tasks) {
   return tasks.map((task) => ({ ...task }));
+}
+
+function isInteractionLocked() {
+  return Boolean(state.activeDialog || state.videoPlaying || state.cinematicOverlay);
 }
 
 function getVisiblePhase() {
@@ -75,8 +91,125 @@ function playAntonellaAudio() {
   audioAntonella.play().catch(() => {});
 }
 
+function clearCinematicTimeout() {
+  if (cinematicTimeout) {
+    window.clearTimeout(cinematicTimeout);
+    cinematicTimeout = null;
+  }
+}
+
+function playLoadingSoundscape(duration = 3800) {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) {
+    return;
+  }
+
+  if (!loadingAudioContext || loadingAudioContext.state === 'closed') {
+    loadingAudioContext = new AudioContextClass();
+  }
+
+  loadingAudioContext.resume().catch(() => {});
+
+  const ctx = loadingAudioContext;
+  const now = ctx.currentTime + 0.02;
+  const totalBursts = 7;
+
+  for (let i = 0; i < totalBursts; i += 1) {
+    const start = now + i * 0.45;
+    const tone = ctx.createOscillator();
+    const toneGain = ctx.createGain();
+    tone.type = i % 2 === 0 ? 'square' : 'triangle';
+    tone.frequency.setValueAtTime(220 + Math.random() * 180, start);
+    tone.frequency.exponentialRampToValueAtTime(90 + Math.random() * 40, start + 0.12);
+    toneGain.gain.setValueAtTime(0.0001, start);
+    toneGain.gain.exponentialRampToValueAtTime(0.07, start + 0.01);
+    toneGain.gain.exponentialRampToValueAtTime(0.0001, start + 0.14);
+    tone.connect(toneGain).connect(ctx.destination);
+    tone.start(start);
+    tone.stop(start + 0.16);
+
+    const bufferSize = Math.max(1, Math.floor(ctx.sampleRate * 0.12));
+    const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const channel = noiseBuffer.getChannelData(0);
+    for (let j = 0; j < bufferSize; j += 1) {
+      channel[j] = (Math.random() * 2 - 1) * (1 - j / bufferSize);
+    }
+
+    const noise = ctx.createBufferSource();
+    const noiseFilter = ctx.createBiquadFilter();
+    const noiseGain = ctx.createGain();
+    noise.buffer = noiseBuffer;
+    noiseFilter.type = 'bandpass';
+    noiseFilter.frequency.setValueAtTime(1200 + Math.random() * 800, start);
+    noiseGain.gain.setValueAtTime(0.0001, start);
+    noiseGain.gain.exponentialRampToValueAtTime(0.04, start + 0.01);
+    noiseGain.gain.exponentialRampToValueAtTime(0.0001, start + 0.11);
+    noise.connect(noiseFilter).connect(noiseGain).connect(ctx.destination);
+    noise.start(start);
+    noise.stop(start + 0.12);
+  }
+
+  window.setTimeout(() => {
+    if (loadingAudioContext && loadingAudioContext.state === 'running') {
+      loadingAudioContext.suspend().catch(() => {});
+    }
+  }, duration + 300);
+}
+
+function startCinematicOverlay(overlay, onComplete) {
+  clearCinematicTimeout();
+  state.mobileTasksOpen = false;
+  state.cinematicOverlay = overlay;
+  state.onCinematicComplete = onComplete ?? null;
+  renderApp();
+
+  if (overlay.sound === 'loading') {
+    playLoadingSoundscape(overlay.duration);
+  }
+
+  if (overlay.duration) {
+    cinematicTimeout = window.setTimeout(() => {
+      finishCinematicOverlay();
+    }, overlay.duration);
+  }
+}
+
+function finishCinematicOverlay() {
+  clearCinematicTimeout();
+  if (!state.cinematicOverlay) {
+    return;
+  }
+
+  const callback = state.onCinematicComplete;
+  state.cinematicOverlay = null;
+  state.onCinematicComplete = null;
+
+  if (callback) {
+    callback();
+    return;
+  }
+
+  renderApp();
+}
+
+function startIntroSequence() {
+  startCinematicOverlay(
+    {
+      kind: 'intro',
+      title: 'STEP 1 PER DIVENTARE PAZZI',
+      subtitle: 'Preparazione officina in corso',
+      duration: 4200,
+      sound: 'loading',
+    },
+    () => {
+      setMessage('Seleziona un attrezzo e clicca i punti numerati sul mezzo.', 'neutral');
+      renderApp();
+    },
+  );
+}
+
 function selectTool(toolId) {
-  if (state.activeDialog || state.videoPlaying) {
+  if (isInteractionLocked()) {
     return;
   }
 
@@ -88,7 +221,7 @@ function selectTool(toolId) {
 
 function completeTask(taskId) {
   const task = state.tasks.find((item) => item.id === taskId);
-  if (!task || task.status === 'completed' || state.activeDialog || state.videoPlaying || state.editorOpen) {
+  if (!task || task.status === 'completed' || isInteractionLocked() || state.editorOpen) {
     return;
   }
 
@@ -139,12 +272,15 @@ function completeTask(taskId) {
 }
 
 function resetGame() {
+  clearCinematicTimeout();
   state.selectedTool = null;
   state.phase = 1;
   state.mobileTasksOpen = false;
   state.dialogQueue = [];
   state.activeDialog = null;
   state.onDialogComplete = null;
+  state.cinematicOverlay = null;
+  state.onCinematicComplete = null;
   state.videoPlaying = false;
   state.draggingTaskId = null;
   state.taskSets = {
@@ -154,11 +290,11 @@ function resetGame() {
   state.tasks = cloneTasks(state.taskSets[1]);
   setMessage('Nuova sessione pronta. Seleziona un attrezzo e riparti.', 'neutral');
   updateCompletionState();
-  renderApp();
+  startIntroSequence();
 }
 
 function toggleMobileTasks() {
-  if (state.activeDialog || state.videoPlaying) {
+  if (isInteractionLocked()) {
     return;
   }
   state.mobileTasksOpen = !state.mobileTasksOpen;
@@ -166,7 +302,7 @@ function toggleMobileTasks() {
 }
 
 function toggleEditor() {
-  if (state.activeDialog || state.videoPlaying) {
+  if (isInteractionLocked()) {
     return;
   }
   state.editorOpen = !state.editorOpen;
@@ -309,41 +445,74 @@ function advanceDialog() {
 
 function startInspectorReviewPhaseOne() {
   state.phase = 1.5;
-  openDialogSequence(
-    [
-      {
-        name: 'Giacomo - Ispettore ATM',
-        image: '/inspector.png',
-        tone: 'warning',
-        text: 'Hmmm... vediamo se siete stati in grado di sistemare questi capolavori di autobus.',
-      },
-      {
-        name: 'Giacomo - Ispettore ATM',
-        image: '/inspector.png',
-        tone: 'danger',
-        text: 'Oh guarda... eh no, questo non va bene. Mi dispiace, ma devo scrivere... eeeeh, lo devo proprio scrivere.',
-      },
-      {
-        name: 'Operaio officina',
-        image: '/operaio.png',
-        tone: 'neutral',
-        text: "No dai, non scrivere. Guarda, l'ho sistemato subito, vedi? Ora e a posto.",
-      },
-      {
-        name: 'Giacomo - Ispettore ATM',
-        image: '/inspector.png',
-        tone: 'danger',
-        text: "Eh, lo so, ho visto. Pero io lo devo scrivere comunque, mi dispiace.",
-      },
-    ],
+  startCinematicOverlay(
+    {
+      kind: 'message',
+      title: 'COLLAUDO FINITO....O FORSE NO..',
+      duration: 2400,
+    },
     () => {
-      state.phase = 2;
-      state.selectedTool = null;
-      state.tasks = cloneTasks(state.taskSets[2]).map((task) => ({ ...task, status: 'pending' }));
-      state.taskSets[2] = cloneTasks(state.tasks);
-      setMessage("L'ispettore ha aggiunto una nuova lista lavori. Si riparte.", 'warning');
-      updateCompletionState();
-      renderApp();
+      openDialogSequence(
+        [
+          {
+            name: 'Giacomo - Ispettore ATM',
+            image: '/inspector.png',
+            tone: 'warning',
+            text: 'Hmmm... vediamo se siete stati in grado di sistemare questi capolavori di autobus.',
+          },
+          {
+            name: 'Giacomo - Ispettore ATM',
+            image: '/inspector.png',
+            tone: 'danger',
+            text: 'Oh guarda... eh no, questo non va bene. Mi dispiace, ma devo scrivere... eeeeh, lo devo proprio scrivere.',
+          },
+          {
+            name: 'Moises',
+            image: '/operaio.png',
+            tone: 'neutral',
+            text: "No dai, non scrivere. Guarda, l'ho sistemato subito, vedi? Ora e a posto.",
+          },
+          {
+            name: 'Giacomo - Ispettore ATM',
+            image: '/inspector.png',
+            tone: 'danger',
+            text: "Eh, lo so, ho visto. Pero io lo devo scrivere comunque, mi dispiace.",
+          },
+        ],
+        () => {
+          startCinematicOverlay(
+            {
+              kind: 'message',
+              title: 'Secondo callaudo',
+              duration: 1800,
+            },
+            () => {
+              openDialogSequence(
+                [
+                  {
+                    name: 'Antonella - Responsabile Iveco',
+                    image: '/antonella.png',
+                    tone: 'warning',
+                    text: 'Ragazzi lo so che sono passati appena 5 minuti ma avete finito????',
+                  },
+                ],
+                () => {
+                  state.phase = 2;
+                  state.selectedTool = null;
+                  state.tasks = cloneTasks(state.taskSets[2]).map((task) => ({
+                    ...task,
+                    status: 'pending',
+                  }));
+                  state.taskSets[2] = cloneTasks(state.tasks);
+                  setMessage("L'ispettore ha aggiunto una nuova lista lavori. Si riparte.", 'warning');
+                  updateCompletionState();
+                  renderApp();
+                },
+              );
+            },
+          );
+        },
+      );
     },
   );
 }
@@ -664,6 +833,53 @@ function renderVideoOverlay() {
   `;
 }
 
+function renderCinematicOverlay() {
+  if (!state.cinematicOverlay) {
+    return '';
+  }
+
+  if (state.cinematicOverlay.kind === 'intro') {
+    return `
+      <div class="cinematic-overlay intro-overlay" role="dialog" aria-modal="true" aria-labelledby="intro-title">
+        <div class="intro-particles">
+          ${introToolSprites
+            .map(
+              (tool, index) => `
+                <img
+                  class="intro-tool tool-${index + 1}"
+                  src="${tool.image}"
+                  alt=""
+                  aria-hidden="true"
+                  style="--tool-x:${tool.x}; --tool-y:${tool.y}; --tool-delay:${tool.delay}; --tool-duration:${tool.duration}; --tool-size:${tool.size}; --tool-rotate:${tool.rotate};"
+                />
+              `,
+            )
+            .join('')}
+        </div>
+        <div class="intro-copy">
+          <p class="intro-kicker">Caricamento officina</p>
+          <h2 id="intro-title">${state.cinematicOverlay.title}</h2>
+          <p>${state.cinematicOverlay.subtitle}</p>
+          <div class="loading-dots" aria-hidden="true">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="cinematic-overlay message-overlay" role="dialog" aria-modal="true" aria-labelledby="message-title">
+      <div class="message-card">
+        <p class="panel-kicker">Officina</p>
+        <h2 id="message-title">${state.cinematicOverlay.title}</h2>
+      </div>
+    </div>
+  `;
+}
+
 function renderDialogOverlay() {
   if (!state.activeDialog) {
     return '';
@@ -700,6 +916,7 @@ function renderApp() {
       </main>
       ${renderEditorPanel()}
       ${renderMobileTasksDrawer()}
+      ${renderCinematicOverlay()}
       ${renderDialogOverlay()}
       ${renderVideoOverlay()}
     </div>
@@ -765,4 +982,4 @@ window.addEventListener('touchmove', handleDragMove, { passive: false });
 window.addEventListener('touchend', stopHotspotDrag);
 
 updateCompletionState();
-renderApp();
+startIntroSequence();
